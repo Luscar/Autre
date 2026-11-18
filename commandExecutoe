@@ -1,0 +1,40 @@
+package com.monprojet;
+
+import java.util.*;
+import org.drools.core.command.runtime.ExecutionResultImpl; // selon ta version : org.drools.core.runtime.impl.ExecutionResultImpl
+import org.jbpm.services.api.*;
+import org.jbpm.services.api.model.ProcessInstanceDesc;
+import org.jbpm.services.api.service.ServiceRegistry;
+import org.kie.api.command.ExecutableCommand;
+import org.kie.api.runtime.Context;
+import org.kie.api.runtime.query.QueryContext;
+import org.kie.internal.KieInternalServices;
+import org.kie.internal.command.RegistryContext;
+import org.kie.internal.process.CorrelationKey;
+
+public class SignalByCorrelationCommand implements ExecutableCommand<Integer> {
+    private String containerId;
+    private String correlationKey;
+    private String signalName;
+    private Object payload;
+    private String outIdentifier = "activatedCount";
+
+    public Integer execute(Context context) {
+        ProcessService ps = (ProcessService) ServiceRegistry.get().service(ServiceRegistry.PROCESS_SERVICE);
+        RuntimeDataService rds = (RuntimeDataService) ServiceRegistry.get().service(ServiceRegistry.RUNTIME_DATA_SERVICE);
+        CorrelationKey ck = KieInternalServices.Factory.get()
+                .newCorrelationKeyFactory().newCorrelationKey(correlationKey);
+
+        int count = 0;
+        for (ProcessInstanceDesc pi : rds.getProcessInstancesByCorrelationKeyAndStatus(
+                ck, Arrays.asList(1), new QueryContext(0, 100))) {
+            if (ps.getAvailableSignals(containerId, pi.getId()).contains(signalName)) {
+                ps.signalProcessInstance(containerId, pi.getId(), signalName, payload);
+                count++;
+            }
+        }
+        ((RegistryContext) context).lookup(ExecutionResultImpl.class).setResult(outIdentifier, count);
+        return count;
+    }
+    // + getters/setters et constructeur vide (requis pour le marshalling)
+}
